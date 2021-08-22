@@ -51,18 +51,18 @@ PR: <https://reviews.llvm.org/D104569>
 
 `SimplyBranchOnICmpChain` performs optimization that changes ICmp chain to br and switch as follows.
 ```
-	%A = icmp ne i32 %mode, 0
-	%B = icmp ne i32 %mode, 51
-	%C = select i1 %A, i1 %B, i1 false
-	%D = select i1 %C, i1 %Cond, i1 false
-	br i1 %D, label %T, label %F
+    %A = icmp ne i32 %mode, 0
+    %B = icmp ne i32 %mode, 51
+    %C = select i1 %A, i1 %B, i1 false
+    %D = select i1 %C, i1 %Cond, i1 false
+    br i1 %D, label %T, label %F
 =>
-	br i1 %Cond, label %switch.early.test, label %F
+    br i1 %Cond, label %switch.early.test, label %F
 switch.early.test:
-	switch i32 %mode, label %T [
-		i32 51, label %F
-		i32 0, label %F
-	]
+    switch i32 %mode, label %T [
+        i32 51, label %F
+        i32 0, label %F
+    ]
 ```
 
 However, this optimization has a problem: branching-on-poison (UB) occurs when `%mode` is 51 and the `%Cond` is poison.
@@ -112,10 +112,10 @@ While checking the performance regression caused by newly introudced freeze, I f
   Cond.fr = freeze(Cond)
   br Cond.fr, BB_True, BB_False
 BB_True:
-  use(Cond.fr)			; Cond.fr is not replaced to true
+  use(Cond.fr)          ; Cond.fr is not replaced to true
   ...
 BB_False:
-  use(Cond.fr)			; Cond.fr is not repalced to false
+  use(Cond.fr)          ; Cond.fr is not repalced to false
   ...
 ```
 
@@ -144,9 +144,9 @@ BB1:
   br cond.fr, TrueBB, FalseBB
 
 TrueBB:
-  use(cond)					; If TrueBB is dominated by BB1, cond is always true.
-							; After freeze is added, cond and cond.fr are considered as
-							; different values, so the value of cond cannot be deduced to true.
+  use(cond)                 ; If TrueBB is dominated by BB1, cond is always true.
+                            ; After freeze is added, cond and cond.fr are considered as
+                            ; different values, so the value of cond cannot be deduced to true.
 ...
 ```
 
