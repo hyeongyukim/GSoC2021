@@ -15,7 +15,7 @@ This project's goal is to fix such miscompilations with minimal-to-no performanc
 Proposal link: <https://github.com/hyeongyukim/GSoC2021/blob/main/proposal.pdf>
 
 ## 1. Fix Miscompilation on InstCombine(GEP+icmp fold)
-Status: Landed
+Status: Landed  
 PR: <https://reviews.llvm.org/D99481>
 
 This bug is one of the bugs in "Project Zero LLVM Bugs."
@@ -32,7 +32,7 @@ And I solve this problem by adding 'and mask' to `index.`
 
 
 ## 2. Add an optimization to prevent poison from being propagated.
-Status: Landed
+Status: Landed  
 PR: <https://reviews.llvm.org/D105392>
 
 It is a patch that prevents poison from propagating by changing the location of the freeze.
@@ -46,7 +46,7 @@ To solve the compilation problem without performance regression, I add an optimi
 
 
 ## 3. Fix SimplifyCFG optimization to be undef/poison safe
-Status: Landed
+Status: Landed  
 PR: <https://reviews.llvm.org/D104569>
 
 `SimplyBranchOnICmpChain` performs optimization that changes ICmp chain to br and switch as follows.
@@ -74,7 +74,7 @@ correctness: <https://alive2.llvm.org/ce/z/x9x4oY>
 
 
 ## 4. Fix introduction of UB when hoisted condition may be undef or poison
-Status: Working in progress
+Status: Working in progress  
 PR: <https://reviews.llvm.org/D106041>
 
 Recently the semantics of LLVM IR's value was formalized recently, and existing optimizations were being fixed to match the semantics.
@@ -129,7 +129,7 @@ After `enable_noundef_analysis` flag turn on by default, performance is likely t
 Therefore, further modifications will be made after #6 is landed.
 
 ## 5. Add `freezeDominatedUses` function at InstCombine
-Status: Landed
+Status: Landed  
 PR: <https://reviews.llvm.org/D106233>
 
 While fixing the miscompilation of LoopUnswitch(<https://reviews.llvm.org/D106041>), I introduced a freeze instruction to a branch condition.
@@ -161,7 +161,7 @@ Links:
 
 
 ## 6. Modify clang to turn on `enable_noundef_analysis` flag by default.
-Status: Waiting for review
+Status: Waiting for review  
 PR: <https://reviews.llvm.org/D105169>  
 PR: <https://reviews.llvm.org/D108453>
 
