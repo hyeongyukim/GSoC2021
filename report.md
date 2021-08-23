@@ -19,7 +19,7 @@ Status: Landed
 PR: <https://reviews.llvm.org/D99481>
 Bug Report: <https://bugs.llvm.org/show_bug.cgi?id=45210>
 
-This bug is one of the bugs in "Project Zero LLVM Bugs." (<https://web.ist.utl.pt/nuno.lopes/alive2/>)
+This bug is one of the bugs in "Project Zero LLVM Bugs."(<https://web.ist.utl.pt/nuno.lopes/alive2/>)
 It is an optimization that converts a comparison based on the value of aggregate data structures to a comparison based on an index. 
 ```
 if (some_array[index] == target_value)
@@ -51,7 +51,7 @@ switch.early.test:
     ]
 ```
 
-However, this optimization was incorrect: branching-on-poison (UB) occurs when `%mode` is 51 and the `%Cond` is poison.
+However, this optimization was incorrect: branching-on-poison(UB) occurs when `%mode` is 51 and the `%Cond` is poison.
 Since the problem occurs when `%Cond` is poison, I can solve this problem by adding freeze instruction before br.
 
 The incorrectness and correctness of this issue can be found in the link below.  
