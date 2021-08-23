@@ -14,11 +14,12 @@ This project's goal is to fix such miscompilations with minimal-to-no performanc
 
 Proposal link: <https://github.com/hyeongyukim/GSoC2021/blob/main/proposal.pdf>
 
-## 1. Fix Miscompilation on InstCombine(GEP+icmp fold)
+## 1. Bug Fix: Fix Miscompilation on InstCombine(GEP+icmp fold)
 Status: Landed  
 PR: <https://reviews.llvm.org/D99481>
+Bug Report: <https://bugs.llvm.org/show_bug.cgi?id=45210>
 
-This bug is one of the bugs in "Project Zero LLVM Bugs."
+This bug is one of the bugs in "Project Zero LLVM Bugs." (<https://web.ist.utl.pt/nuno.lopes/alive2/>)
 It is an optimization that converts a comparison based on the value of aggregate data structures to a comparison based on an index. 
 ```
 if (some_array[index] == target_value)
@@ -30,22 +31,7 @@ When we assume ElementSize is 2, `some_array[index] == target_value` will be tru
 And I solve this problem by adding 'and mask' to `index.`
 
 
-
-## 2. Add an optimization to prevent poison from being propagated.
-Status: Landed  
-PR: <https://reviews.llvm.org/D105392>
-
-It is a patch that prevents poison from propagating by changing the location of the freeze.
-I observed that an additional assembly was inserted while solving the miscompilation problem of SimplyCFG(D104569).
-This means that existing optimization is being disturbed by the newly added freeze.
-To solve the compilation problem without performance regression, I add an optimization pass that pushes the freeze until the below conditions are met.
-- One-use
-- Does not produce poison
-- Has all but one guaranteed-non-poison operand
-
-
-
-## 3. Fix SimplifyCFG optimization to be undef/poison safe
+## 2. Bug Fix: Fix SimplifyCFG optimization to be undef/poison safe
 Status: Landed  
 PR: <https://reviews.llvm.org/D104569>
 
@@ -65,15 +51,55 @@ switch.early.test:
     ]
 ```
 
-However, this optimization has a problem: branching-on-poison (UB) occurs when `%mode` is 51 and the `%Cond` is poison.
+However, this optimization was incorrect: branching-on-poison (UB) occurs when `%mode` is 51 and the `%Cond` is poison.
 Since the problem occurs when `%Cond` is poison, I can solve this problem by adding freeze instruction before br.
 
 The incorrectness and correctness of this issue can be found in the link below.  
 incorrectness: <https://alive2.llvm.org/ce/z/BWScX>  
 correctness: <https://alive2.llvm.org/ce/z/x9x4oY>
 
+## 3. Improvement: Add an optimization to prevent poison from being propagated.
+Status: Landed  
+PR: <https://reviews.llvm.org/D105392>
 
-## 4. Fix introduction of UB when hoisted condition may be undef or poison
+It is a patch that prevents poison from propagating by changing the location of the freeze.
+I observed that an additional assembly was inserted while solving the miscompilation problem of SimplyCFG(D104569).
+This means that existing optimization is being disturbed by the newly added freeze.
+To solve the compilation problem without performance regression, I add an optimization pass that pushes the freeze until the below conditions are met.
+- One-use
+- Does not produce poison
+- Has all but one guaranteed-non-poison operand
+
+## 4. Improvement: Add `freezeDominatedUses` function at InstCombine
+Status: Landed  
+PR: <https://reviews.llvm.org/D106233>
+
+While fixing the miscompilation of LoopUnswitch(<https://reviews.llvm.org/D106041>), newly added freeze disturbed other optimizations such as SimplifyCFG.
+And this patch was created to reduce the performance regression caused while fixing the LoopUnswitch.(Details of LoopUnswitch patch can be found in section 5.)
+The problems that this patch solves are as follows.
+
+```
+...
+BB1:
+  cond.fr = freeze(cond)  	; newly added freeze while fixing LoopUnswitch
+  br cond.fr, TrueBB, FalseBB
+
+TrueBB:
+  use(cond)                 ; If TrueBB is dominated by BB1, cond is always true.
+                            ; After freeze is added, cond and cond.fr are considered as
+                            ; different values, so the value of cond cannot be deduced to true.
+...
+```
+
+Because it is a problem that occurs when using `cond` and `cond.fr` simultaneously, this can be solved by changing all uses of `cond` to `cond.fr`.
+I implemented the function `freezeDominatedUses` in InstCombine, which changes all dominated uses to frozen values.
+
+The correctness of the patch can be checked by Alive2.  
+Links:  
+<https://alive2.llvm.org/ce/z/WKSW66>  
+<https://alive2.llvm.org/ce/z/vqiQLT>
+
+## 5. Bug Fix: Fix introduction of UB when hoisted condition may be undef or poison
 Status: Working in progress  
 PR: <https://reviews.llvm.org/D106041>
 
@@ -128,51 +154,23 @@ Several patches have been made, but performance regression still exists.
 After `enable_noundef_analysis` flag turn on by default, performance is likely to improve significantly.
 Therefore, further modifications will be made after #6 is landed.
 
-## 5. Add `freezeDominatedUses` function at InstCombine
-Status: Landed  
-PR: <https://reviews.llvm.org/D106233>
-
-While fixing the miscompilation of LoopUnswitch(<https://reviews.llvm.org/D106041>), I introduced a freeze instruction to a branch condition.
-But newly added freeze disturbed other optimizations such as SimplifyCFG.
-Freeze is a no-op that does not cause performance regression, so I can reduce performance regression by changing other optimization passes freeze-aware.
-A good example is this patch, which solves the problem of newly added freeze is blocking SimplyCFG.
-
-```
-...
-BB1:
-  cond.fr = freeze(cond)  	; newly added freeze while fixing LoopUnswitch
-  br cond.fr, TrueBB, FalseBB
-
-TrueBB:
-  use(cond)                 ; If TrueBB is dominated by BB1, cond is always true.
-                            ; After freeze is added, cond and cond.fr are considered as
-                            ; different values, so the value of cond cannot be deduced to true.
-...
-```
-
-Because it is a problem that occurs when using `cond` and `cond.fr` simultaneously, this can be solved by changing all uses of `cond` to `cond.fr`.
-I implemented the function `freezeDominatedUses` in InstCombine, which changes all dominated uses to frozen values.
-
-The correctness of the patch can be checked by Alive2.  
-Links:  
-<https://alive2.llvm.org/ce/z/WKSW66>  
-<https://alive2.llvm.org/ce/z/vqiQLT>
-
-
-
-## 6. Modify clang to turn on `enable_noundef_analysis` flag by default.
+## 6. Improvement: Modify clang to turn on `enable_noundef_analysis` flag by default.
 Status: Waiting for review  
 PR: <https://reviews.llvm.org/D105169>  
 PR: <https://reviews.llvm.org/D108453>
-
 
 Like above, this patch is intended to solve the performance regression that occurred while fixing the LoopUnswitch.
 Some of the freezes were applied to function arguments, and it disturbed some optimizations like inlining.
 If the argument has a `noundef` attribute, the freeze will not be added because we only add freeze if the value can be undef or poison.
 We can add the noundef attribute to the function arguments by adding the `enable_noundef_args` flag to the compiler.
 It is cumbersome to add this flag all-time, so I created a patch that turns `enable_noundef_analysis` by default.
-More than 1000 test codes were affected by this patch that changed Clang's default flag.
+There have been previous attempts to turn on the `enable_noundef_args` flag, but too many tests need to be modified to turn it on.
+More than 1000 test codes were affected by this patch while changing Clang's default flag and only 100 to 200 tests were automatically generated.
+The rest of the tests required manual updates.
 
+Most tests required to attach noundef to function argument, so it was programmatically resolvable.
+I wrote a script that inserts noundef using regex.
+However, trial and error were repeated because it was hard to know when the noundef should be added without compiling it directly.
 
 ## Future Work
 
@@ -184,4 +182,4 @@ To fix the LoopUnswitch, I will first try to land the patch that turn on `enable
 
 I would like to appreciate all LLVM community member for their help during this project. 
 Thanks for my mentors Juneyoung Lee and Nuno Lopes for patient guide through the entire process.
-And I also thanks to all reviewers of my code.
+And I also thank to all reviewers of my code.
